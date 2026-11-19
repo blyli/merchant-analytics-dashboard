@@ -1,0 +1,160 @@
+# Merchant Analytics Dashboard
+
+A Next.js (TypeScript) dashboard over the Store Order History export for **May–October 2025**
+(28 line items across 20 orders). It computes five merchant metrics, each with its own function and chart,
+and tests every metric against the CSV.
+
+## Running it
+
+Requirements: Node.js 20.9+ and npm.
+
+```bash
+npm install
+npm run dev        # http://localhost:3000
+```
+
+Production build and start:
+
+```bash
+npm run build
+npm start          # http://localhost:3000
+```
+
+Tests:
+
+```bash
+npm test           # vitest run (one-off)
+npm run test:watch # vitest in watch mode
+```
+
+Lint and typecheck:
+
+```bash
+npm run lint
+npx tsc --noEmit
+```
+
+The dashboard reads `?range=last-week` or `?range=this-month` (default: this month).
+
+## Dataset
+
+File: `data/store_order_history-may_to_october_2025.csv` (committed, read at runtime).
+
+- **Load behaviour.** The loader parses every row and keeps every row. Nothing is dropped, deduplicated,
+  or mutated. Returned items stay in the dataset. Returns, refunds, and order rollups are handled inside the
+  metric functions.
+- **Validation.** The loader rejects the file (with row numbers) if the header is wrong, a date is not a real
+  `YYYY-MM-DD`, a boolean is not `true`/`false`, `line_total ≠ quantity × unit_price − discount_amount`, a returned
+  line lacks `return_date` or `return_reason`, a non-returned line has return fields, a refund is outside
+  `[0, line_total]`, or lines sharing an `order_id` disagree on `order_date` or `customer_id`.
+- **Currency.** The CSV has no currency column. Amounts are displayed as USD.
+- **Repeat flag.** `is_repeat_customer` is recorded per line at order time. The dashboard uses it as given.
+
+Shape of the data as loaded: 28 lines, 20 unique `order_id`s, 8 returned lines, returns dated 2025-07-08
+through 2025-10-27.
+
+## Date rules
+
+All calculations use inclusive `YYYY-MM-DD` bounds. "Today" is fixed at **2025-10-27**.
+
+| Preset | Window | Notes |
+|---|---|---|
+| Last week | `2025-10-20` → `2025-10-26` | Monday through Sunday |
+| This month | `2025-10-01` → `2025-10-27` | Month-to-date |
+
+- **Weeks** are Monday to Sunday. `weekStart()` returns the Monday of the week containing a date.
+- **Previous period** is the equal-length window immediately before the current one. Last week compares with
+  `2025-10-13`–`2025-10-19`. This month compares with `2025-09-04`–`2025-09-30` (27 days, the same length as
+  month-to-date). The previous period is not the same days of the prior month. If you want the prior month
+  instead, change `previousPeriod()` in `src/lib/data/dates.ts`.
+- **Cohort rule.** Order-cohort metrics (net sales, AOV, repeat customers, category/channel) filter on
+  `order_date`. Returns metrics filter on `return_date` by default. Pass `dateField: "order_date"` to
+  `returnsRefunds()` to filter on the order date instead.
+
+## Metrics and formulas
+
+Every metric is a function `(startDate, endDate, options?)` in `src/lib/metrics/`. `options.lines` overrides the
+dataset, which the tests use for fixtures.
+
+### 1. Net sales — `netSales()` — line chart
+
+| Figure | Definition |
+|---|---|
+| `grossSales` | `SUM(line_total)` for lines with `order_date` in the window |
+| `discounts` | `SUM(discount_amount)`. Informational only: `line_total` is already net of discount, so it is not subtracted again |
+| `refunds` | `SUM(refund_amount)` for the same lines, counted against the order date even if the return happened later |
+| `netSales` | `grossSales − refunds` (= `SUM(line_total) − SUM(refund_amount)`) |
+| `orderCount` | `COUNT(DISTINCT order_id)` |
+| `daily` | One zero-filled point per calendar day (gross, refunds, net) |
+| `netSalesChangePct` | `(net − prevNet) / |prevNet| × 100`, rounded to 0.1. `null` when the previous period is 0 |
+
+### 2. Average order value — `averageOrderValue()` — weekly bar chart with AOV callout
+
+- Line items are rolled up to one row per `order_id`: `total = SUM(line_total)` and `itemCount = SUM(quantity)`.
+- `averageOrderValue = SUM(order total) / COUNT(DISTINCT order_id)` over the window's orders.
+- `weekly` buckets orders by Monday-start week, with per-week order count, revenue, and AOV.
+- A multi-item order is one order. It is never counted once per line.
+
+### 3. Repeat customers — `repeatCustomers()` — donut chart
+
+- `buyers = COUNT(DISTINCT customer_id)` for in-window lines.
+- A buyer is **returning** if any in-window line has `is_repeat_customer = true`, otherwise **new**.
+- `returningSharePct = returning / buyers × 100`.
+- `multiOrderBuyers` counts buyers with `COUNT(DISTINCT order_id) > 1` inside the window.
+
+The flag is stored per line at order time, so "returning" describes the customer's status in this window,
+not a lifetime count. A customer with mixed flags counts as returning.
+
+### 4. Returns and refunds — `returnsRefunds()` — bar chart by reason
+
+- Filters on `return_date` by default. Pass `{ dateField: "order_date" }` to use the order date.
+- `returnedItemCount = SUM(quantity)` over returned lines. `returnedLineCount` is the number of lines.
+- `refundTotal = SUM(refund_amount)` over the same lines.
+- `byReason` groups by `return_reason`, sorted by refund total (descending), then item count, then name.
+
+These figures use a different date basis from net sales (return date here, order date there). That is why the
+dashboard labels them separately.
+
+### 5. Sales by category and channel — `salesByCategoryAndChannel()` — stacked bar chart
+
+Order-date cohort. Gross and net for each `product_category`, `product_title` (by `product_id`), and
+`sales_channel`, plus a category × channel matrix for the stacked chart. Net = gross − refunds, same as above.
+
+Channel colours are assigned in a fixed order (Online Store, Shop app, Point of Sale, Instagram). A channel
+keeps its colour when the filter changes. Any channel outside that list is shown in grey as "Other".
+
+## Charts and accessibility
+
+- Palette: the validated categorical slots from the data-viz reference (`src/components/charts/theme.ts`).
+  The validator reports a light-mode contrast warning for the aqua and yellow slots, so every chart also has a
+  "Show data table" view that carries the same numbers.
+- Dark mode follows the OS setting (`prefers-color-scheme`). There is no in-page toggle.
+- Charts with two or more series have a legend.
+
+## Project layout
+
+```
+data/                          CSV dataset (read at runtime)
+src/lib/data/                  CSV parser, loader and validation, dates, money, order rollup
+src/lib/metrics/               one file per metric; (startDate, endDate, options) signatures
+src/lib/dashboard.ts           runs all metrics for one window
+src/lib/tests/                 vitest suites (dataset, dates, metrics, fixtures)
+src/components/charts/         recharts client components
+src/app/page.tsx               server page; reads ?range and renders
+```
+
+## Tests
+
+`src/lib/tests/` covers:
+
+- the CSV parser (quotes, escaped quotes, CRLF, empty fields),
+- the loader's validation rules and the real dataset (28 rows, 20 orders, 8 returns),
+- the date rules (presets, Monday weeks, previous period, inclusive bounds),
+- every metric against figures computed independently from the CSV: net sales, AOV (including a multi-item
+  order), repeat buyers, returns by return date and by order date, and category/channel totals reconciling to
+  the window total.
+
+## Deploying
+
+Standard Next.js app. `npm run build` followed by `npm start`, or deploy to any Node-capable host. The dashboard
+reads `data/` from the working directory at runtime, so the `data/` folder must ship with the app.
