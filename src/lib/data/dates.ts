@@ -80,3 +80,72 @@ export function enumerateDays(window: DateWindow): string[] {
   for (let i = 0; i < n; i++) days.push(addDays(window.startDate, i));
   return days;
 }
+
+/** First order date in the dataset. */
+export const DATASET_START = "2025-05-06";
+
+export type DateRangeKey =
+  | "today"
+  | "yesterday"
+  | "this-week"
+  | "last-week"
+  | "this-month"
+  | "last-month"
+  | "all-time";
+
+export const DATE_RANGE_KEYS: readonly DateRangeKey[] = [
+  "today",
+  "yesterday",
+  "this-week",
+  "last-week",
+  "this-month",
+  "last-month",
+  "all-time",
+];
+
+/**
+ * Resolves a named range to inclusive YYYY-MM-DD bounds, anchored to TODAY (or `today`).
+ * Weeks are Mon-Sun; an in-progress week or month ends at `today`, never in the future.
+ */
+export function resolveDateRange(key: DateRangeKey, today: string = TODAY): DateWindow {
+  switch (key) {
+    case "today":
+      return { startDate: today, endDate: today };
+    case "yesterday": {
+      const y = addDays(today, -1);
+      return { startDate: y, endDate: y };
+    }
+    case "this-week":
+      return { startDate: weekStart(today), endDate: today };
+    case "last-week": {
+      const monday = addDays(weekStart(today), -7);
+      return { startDate: monday, endDate: addDays(monday, 6) };
+    }
+    case "this-month":
+      return { startDate: `${today.slice(0, 7)}-01`, endDate: today };
+    case "last-month": {
+      const lastOfPrev = addDays(`${today.slice(0, 7)}-01`, -1);
+      return { startDate: `${lastOfPrev.slice(0, 7)}-01`, endDate: lastOfPrev };
+    }
+    case "all-time":
+      return { startDate: DATASET_START, endDate: today };
+  }
+}
+
+export interface ClampedWindow extends DateWindow {
+  /** True when the requested dates were invalid, reversed, or outside the dataset and were changed. */
+  adjusted: boolean;
+}
+
+/**
+ * Defensive normalizer for model-supplied dates. Never throws: invalid dates fall back to the
+ * dataset bound, out-of-range dates are pulled inside [DATASET_START, TODAY], and a reversed
+ * window is swapped.
+ */
+export function clampToDatasetBounds(startDate: string, endDate: string): ClampedWindow {
+  const clamp = (v: string) => (v < DATASET_START ? DATASET_START : v > TODAY ? TODAY : v);
+  let start = isIsoDate(startDate) ? clamp(startDate) : DATASET_START;
+  let end = isIsoDate(endDate) ? clamp(endDate) : TODAY;
+  if (start > end) [start, end] = [end, start];
+  return { startDate: start, endDate: end, adjusted: start !== startDate || end !== endDate };
+}

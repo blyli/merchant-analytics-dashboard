@@ -123,6 +123,52 @@ Order-date cohort. Gross and net for each `product_category`, `product_title` (b
 Channel colours are assigned in a fixed order (Online Store, Shop app, Point of Sale, Instagram). A channel
 keeps its colour when the filter changes. Any channel outside that list is shown in grey as "Other".
 
+## Chat API
+
+`POST /api/chat` streams answers to merchant questions ("which jackets came back as returns last week?") using the
+Vercel AI SDK (`ai`) and OpenRouter (`@openrouter/ai-sdk-provider`).
+
+Setup:
+
+```bash
+cp .env.example .env.local     # then set OPENROUTER_API_KEY
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OPENROUTER_API_KEY` | none (required) | OpenRouter key. `.env*` is gitignored, only `.env.example` is committed |
+| `OPENROUTER_MODEL_ID` | `google/gemma-4-31b-it:free` | Any OpenRouter model id |
+
+Request: `{ "messages": UIMessage[] }` (the AI SDK `useChat` shape). Response: a UI message stream
+(`toUIMessageStreamResponse()`) containing the tool call, its structured result, and the streamed answer.
+
+How it works:
+
+- **Date anchoring.** "Today" is fixed at Monday `2025-10-27`. `resolveDateRange()` (`src/lib/data/dates.ts`) computes the
+  exact ranges for today, yesterday, this week, last week, this month, last month and all time (`2025-05-06` to
+  `2025-10-27`). They are written into the system prompt as a lookup table, so the model copies date strings instead of
+  doing calendar arithmetic. "This week" is Mon to today because the rest of the week is in the future.
+- **Tools** (`src/lib/chat/tools.ts`): `getSalesMetrics`, `getReturnsMetrics`, `getRepeatCustomerMetrics`,
+  `getAverageOrderValue`. Each takes `startDate` / `endDate` (`YYYY-MM-DD`, Zod-validated); sales and returns also take
+  optional `category` and `product` filters. Every result has `summary` numbers plus chart-ready series under `charts`.
+- **Guardrails.** Dates pass through `clampToDatasetBounds()`: invalid dates fall back to the dataset bounds,
+  out-of-range dates are clamped, reversed ranges are swapped, and the result carries a `dateNote` when anything changed.
+- **One tool call.** `stopWhen: stepCountIs(2)`: step 1 is the tool call, step 2 is the written answer. The prompt also asks
+  for at most one call. Ad spend, ROAS and other unsupported metrics get a polite explanation.
+- **Errors.** An OpenRouter 429 returns HTTP 429 with `{ "error": "rate_limited", "message": ... }` and `Retry-After`.
+  A missing key or malformed body returns a JSON 500 or 400. A 429 that happens mid-stream arrives as a stream error
+  with the same message.
+
+Try it (needs a real key):
+
+```bash
+curl -N -X POST http://localhost:3000/api/chat -H "content-type: application/json" \
+  -d '{"messages":[{"id":"1","role":"user","parts":[{"type":"text","text":"which jackets came back as returns last week"}]}]}'
+```
+
+The tests use a scripted mock model, so they check the wiring (prompt, tool choice and arguments, step cap, 429
+handling) but not how well Gemma 4 picks tools. That needs a live run.
+
 ## Charts and accessibility
 
 - Palette: the validated categorical slots from the data-viz reference (`src/components/charts/theme.ts`).
@@ -138,6 +184,8 @@ data/                          CSV dataset (read at runtime)
 src/lib/data/                  CSV parser, loader and validation, dates, money, order rollup
 src/lib/metrics/               one file per metric; (startDate, endDate, options) signatures
 src/lib/dashboard.ts           runs all metrics for one window
+src/lib/chat/                  system prompt (date table), AI SDK tools, streamText wiring
+src/app/api/chat/route.ts      streaming chat endpoint (OpenRouter)
 src/lib/tests/                 vitest suites (dataset, dates, metrics, fixtures)
 src/components/charts/         recharts client components
 src/app/page.tsx               server page; reads ?range and renders
