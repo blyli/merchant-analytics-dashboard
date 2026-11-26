@@ -1,6 +1,6 @@
 # Acceptance Test Results
 
-- **Live Preview URL:** https://merchant-analytics-dashboard-jnragy8dq-blylis-projects.vercel.app
+- **Live Preview URL:** https://merchant-analytics-dashboard-fgknvpyxn-blylis-projects.vercel.app/
 - **Deployment ID:** `dpl_2KwC8baqBaezy777CXzACMys1pW6`
 - **Reference Date:** Fixed at `2025-10-27` (dataset window: `2025-05-06` to `2025-10-27`)
 
@@ -8,7 +8,7 @@
 
 - **AQ-03:** Pass — resolved `"last week"` to `2025-10-20`–`2025-10-26` (return date), filtered to jackets, rendered return-reason chart and returned order lines (`Northridge Insulated Jacket`, S / Olive, Oct 23, Too small, $135.15, 1 unit).
 - **AQ-07:** Pass — declined out-of-scope Meta ad spend without inventing a chart, noted available scope (orders, sales, customers, returns), and offered sales/returns alternatives.
-- **Vague / Missing Date Sample (AQ-02, AQ-04, AQ-08, AQ-11, AQ-12):** All 5 rendered without crashing and applied concrete date windows (`2025-05-06` -> `2025-10-27` for AQ-02, AQ-04, AQ-08; `2025-10-27` for AQ-11; `2025-10-20` -> `2025-10-26` for AQ-12).
+- **Vague / Missing Date Sample (AQ-02, AQ-04, AQ-08, AQ-11, AQ-12):** All 5 rendered without crashing and applied concrete date windows (`2025-05-06` -> `2025-10-27` for AQ-02 and AQ-08; `2025-06-01` -> `2025-10-27` for AQ-04; `2025-10-27` for AQ-11; `2025-10-20` -> `2025-10-26` for AQ-12) — 4 Pass, 1 Fail (AQ-12).
 
 ## Detailed Log
 
@@ -25,26 +25,31 @@
 - **Screenshot:** `screenshots/aq-07.png`
 
 ### AQ-02 — "best sellers this season" (Vague date)
+- **Status:** Pass — Gives a merchant concrete top-selling products and charts over a clearly stated window (`2025-05-06` -> `2025-10-27`), though mapping an undefined "season" to the full dataset is approximate.
 - **Date Range Used:** `2025-05-06` -> `2025-10-27` (full dataset window since `"this season"` is undefined)
 - **Chart / Output:** Called `getSalesMetrics`, returned top products by net sales/units (`Selvedge Slim Jeans` $436.60 / 4 units, `Northridge Insulated Jacket` $332.31 / 4 units, etc.), and rendered *Net sales by day* and *Net sales by category and channel* charts.
 - **Screenshot:** `screenshots/aq-02.png`
 
 ### AQ-04 — "are repeat customers growing since summer" (Vague date)
+- **Status:** Pass — Directly answers the growth question with a month-by-month breakdown (`2025-06-01` -> `2025-10-27`) and charts, though small buyer counts in June–September (`1`–`2` buyers vs. `12` in partial October) limit trend certainty.
 - **Date Range Used:** `2025-06-01` – `2025-10-27` (`2025-06-01` -> `2025-10-27`, interpreting "since summer" from June 1 through the reference date)
 - **Chart / Output:** Rendered *Returning vs new buyers* donut chart (`17` buyers total; `41.2%` returning / `7` returning vs. `10` new; `1` multi-order vs. `16` single-order) and *Returning vs new buyers by month* stacked bar chart (`2025-06`: 1 buyer, 1 returning / 0 new, 100.0%; `2025-07`: 1 buyer, 0 returning / 1 new, 0%; `2025-08`: 1 buyer, 1 returning / 0 new, 100.0%; `2025-09`: 2 buyers, 1 returning / 1 new, 50%; `2025-10` partial through Oct 27: 12 buyers, 4 returning / 8 new, 33.3%), concluding repeat-customer share is not growing (returning share declined from 100% in June/August to 33.3% in October while new-buyer volume rose to 8, with small sample sizes prior to October).
 - **Screenshots:** `screenshots/aq-04.1.png`, `screenshots/aq-04.2.png`
 
 ### AQ-08 — "how are returns doing" (Missing date)
+- **Status:** Pass — Gives a merchant a clear, accurate overview of refund totals, top return reasons, and returned lines across the dataset (`2025-05-06` – `2025-10-27`).
 - **Date Range Used:** `2025-05-06` – `2025-10-27` (`2025-05-06` -> `2025-10-27`, full dataset window)
 - **Chart / Output:** Rendered *Refunds by return reason* horizontal bar chart (`$1,116.94` refunded across `8` returned items, filtered on return date) and *Returned order lines* table (`8` lines), plus summary stats (`$1,116.94` refunds vs. `$3,098.35` gross sales / `36%` share, led by `Alpine Down Parka`).
 - **Screenshot:** `screenshots/aq-08.png`
 
 ### AQ-11 — "what's selling rn" (Vague date)
+- **Status:** Pass — Safely anchors `"rn"` to `2025-10-27` and shows exact items, categories, and revenue sold that day without guessing or crashing.
 - **Date Range Used:** `2025-10-27` – `2025-10-27` (`2025-10-27`, fixed reference day for `"rn"`)
 - **Chart / Output:** Rendered *Net sales by day* (`$182.20` net sales across `1` order on Oct 27) and *Net sales by category and channel* (`Online Store`: `Outerwear` $94.00 / `Harbor Rain Shell` 1 unit, `Knitwear` $88.20 / `Cable Knit Cardigan` 1 unit).
 - **Screenshot:** `screenshots/aq-11.png`
 
 ### AQ-12 — "return rate on boots lately?" (Vague date)
+- **Status:** Fail — Reports `0` sales/returns and an `N/A` return rate for `2025-10-20`–`2025-10-26`, but does not clarify whether boots are missing from the catalog altogether or had no sales in that window.
 - **Date Range Used:** `2025-10-20` – `2025-10-26` (last week relative to `2025-10-27` for `"lately"`, filtered to `"boot"`)
 - **Chart / Output:** Rendered *Refunds by return reason* card without crash showing `0` items returned, `$0.00` refunded, `0` units sold, and `N/A` return rate (empty state / no bars plotted because there were no returns in the window).
 - **Screenshot:** `screenshots/aq-12.png`
