@@ -7,7 +7,7 @@ import type { OrderLine } from "../data/types";
 import { averageOrderValue } from "../metrics/averageOrderValue";
 import { netSales } from "../metrics/netSales";
 import { repeatCustomers } from "../metrics/repeatCustomers";
-import { returnsRefunds } from "../metrics/returnsRefunds";
+import { returnsRefunds, UNSPECIFIED_REASON } from "../metrics/returnsRefunds";
 import { salesByCategoryAndChannel } from "../metrics/salesBreakdown";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -35,6 +35,24 @@ function applyFilters(lines: readonly OrderLine[], { category, product }: Filter
       (!c || l.productCategory.toLowerCase() === c) &&
       (!p || l.productTitle.toLowerCase().includes(p) || l.productCategory.toLowerCase().includes(p)),
   );
+}
+
+/** One returned order line, cleaned up for display in a table. */
+export interface ReturnedItem {
+  product: string;
+  variant: string;
+  /** YYYY-MM-DD */
+  returnDate: string;
+  reason: string;
+  refundAmount: number;
+}
+
+/** Returns aggregated per product, for a bar chart. */
+export interface ReturnsByProductRow {
+  product: string;
+  category: string;
+  itemCount: number;
+  refunds: number;
 }
 
 function note(adjusted: boolean, startDate: string, endDate: string) {
@@ -113,21 +131,33 @@ export function createChatTools(getLines: () => readonly OrderLine[] = loadOrder
           string,
           { productTitle: string; category: string; units: number; refundCents: number; reasons: Set<string> }
         >();
+        const returnedItems: ReturnedItem[] = [];
         for (const l of lines) {
           const d = field === "return_date" ? l.returnDate : l.orderDate;
-          if (!l.returned || d === null || !isWithinWindow(d, w)) continue;
+          if (!l.returned || l.returnDate === null || d === null || !isWithinWindow(d, w)) continue;
+          const reason = l.returnReason?.trim() || UNSPECIFIED_REASON;
           const e = items.get(l.productId) ?? {
-            productTitle: l.productTitle,
-            category: l.productCategory,
+            productTitle: l.productTitle.trim(),
+            category: l.productCategory.trim(),
             units: 0,
             refundCents: 0,
             reasons: new Set<string>(),
           };
           e.units += l.quantity;
           e.refundCents += toCents(l.refundAmount);
-          if (l.returnReason) e.reasons.add(l.returnReason);
+          e.reasons.add(reason);
           items.set(l.productId, e);
+          returnedItems.push({
+            product: l.productTitle.trim(),
+            variant: l.variant.trim(),
+            returnDate: l.returnDate,
+            reason,
+            refundAmount: l.refundAmount,
+          });
         }
+        returnedItems.sort(
+          (a, b) => b.returnDate.localeCompare(a.returnDate) || a.product.localeCompare(b.product),
+        );
         const byProduct = [...items.values()]
           .map((e) => ({
             productTitle: e.productTitle,
@@ -137,6 +167,9 @@ export function createChatTools(getLines: () => readonly OrderLine[] = loadOrder
             reasons: [...e.reasons],
           }))
           .sort((a, b) => b.unitsReturned - a.unitsReturned || b.refunds - a.refunds);
+        const returnsByProduct: ReturnsByProductRow[] = byProduct
+          .map((p) => ({ product: p.productTitle, category: p.category, itemCount: p.unitsReturned, refunds: p.refunds }))
+          .sort((a, b) => b.refunds - a.refunds || b.itemCount - a.itemCount || a.product.localeCompare(b.product));
 
         return {
           ...note(w.adjusted, w.startDate, w.endDate),
@@ -153,7 +186,8 @@ export function createChatTools(getLines: () => readonly OrderLine[] = loadOrder
             basisNote: "Refunds are by return date; gross sales are by order date, so the share is a rough indicator.",
           },
           byProduct,
-          charts: { returnsByReason: returns.byReason },
+          returnedItems,
+          charts: { returnsByReason: returns.byReason, returnsByProduct },
         };
       },
     }),

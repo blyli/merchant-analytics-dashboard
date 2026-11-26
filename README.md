@@ -34,7 +34,9 @@ npm run lint
 npx tsc --noEmit
 ```
 
-The dashboard reads `?range=last-week` or `?range=this-month` (default: this month).
+The page opens with a chat window (see [Chat UI](#chat-ui)) above the dashboard. The dashboard reads
+`?range=last-week` or `?range=this-month` (default: this month). The chat needs `OPENROUTER_API_KEY` (see
+[Chat API](#chat-api)). The dashboard works without it.
 
 ## Dataset
 
@@ -151,6 +153,10 @@ How it works:
 - **Tools** (`src/lib/chat/tools.ts`): `getSalesMetrics`, `getReturnsMetrics`, `getRepeatCustomerMetrics`,
   `getAverageOrderValue`. Each takes `startDate` / `endDate` (`YYYY-MM-DD`, Zod-validated); sales and returns also take
   optional `category` and `product` filters. Every result has `summary` numbers plus chart-ready series under `charts`.
+  `getReturnsMetrics` also returns `charts.returnsByReason` and `charts.returnsByProduct` (item count and refunds per
+  reason / product, for bar charts) and `returnedItems`: one row per returned order line with `product`, `variant`,
+  `returnDate`, `reason` (`"Unspecified"` if blank) and `refundAmount`, newest return first. Both reconcile to
+  `summary.refundTotal`.
 - **Guardrails.** Dates pass through `clampToDatasetBounds()`: invalid dates fall back to the dataset bounds,
   out-of-range dates are clamped, reversed ranges are swapped, and the result carries a `dateNote` when anything changed.
 - **One tool call.** `stopWhen: stepCountIs(2)`: step 1 is the tool call, step 2 is the written answer. The prompt also asks
@@ -168,6 +174,34 @@ curl -N -X POST http://localhost:3000/api/chat -H "content-type: application/jso
 
 The tests use a scripted mock model, so they check the wiring (prompt, tool choice and arguments, step cap, 429
 handling) but not how well Gemma 4 picks tools. That needs a live run.
+
+## Chat UI
+
+`src/components/chat/ChatPanel.tsx` is a client component that uses `useChat` from `@ai-sdk/react` with a
+`DefaultChatTransport` pointed at `/api/chat`. Messages are typed with `InferUITools<ChatTools>`, so each tool part
+carries its real output type.
+
+- **Thread and input.** A scrolling message thread, a text input with Send (Stop while streaming), and quick-start
+  chips, including "Which jackets came back as returns last week?".
+- **Chart per answer.** Assistant messages are rendered part by part. Tool parts become chart cards built from the same
+  components as the dashboard (`src/components/chat/ToolResult.tsx`). The model's text is rendered below them as it
+  streams (a small renderer handles paragraphs, lists and `**bold**`).
+
+  | Tool | Rendered as |
+  |---|---|
+  | `getSalesMetrics` | Net sales line chart, plus the category × channel stacked bar when there is data |
+  | `getAverageOrderValue` | Weekly AOV bar chart with an AOV callout tile |
+  | `getRepeatCustomerMetrics` | New vs returning donut |
+  | `getReturnsMetrics` | Refunds-by-reason bar chart, plus a table of returned order lines (`returnedItems`) |
+
+  Every card keeps the "Show data table" view. For returns it shows the reason and per-product breakdowns.
+- **Date notes.** If a tool result has a `dateNote` (dates clamped to the dataset bounds), an amber banner appears
+  above that chart.
+- **Loading.** A shimmer card appears while the request is `submitted`, while the stream is open with nothing to show
+  yet (including model reasoning), and in place of a chart whose tool call has no `output` yet. A text shimmer covers the
+  gap between the chart and the first summary token. The animation is off under `prefers-reduced-motion`.
+- **Errors.** An HTTP 429 or a mid-stream rate-limit error shows a "Rate limited" banner. Other failures show the
+  route's message. Both banners have Retry (`regenerate()`) and Dismiss buttons. A tool that fails shows its error inline.
 
 ## Charts and accessibility
 
@@ -188,7 +222,8 @@ src/lib/chat/                  system prompt (date table), AI SDK tools, streamT
 src/app/api/chat/route.ts      streaming chat endpoint (OpenRouter)
 src/lib/tests/                 vitest suites (dataset, dates, metrics, fixtures)
 src/components/charts/         recharts client components
-src/app/page.tsx               server page; reads ?range and renders
+src/components/chat/           chat window (useChat), per-tool chart cards, loading skeleton
+src/app/page.tsx               server page: chat in the static shell, dashboard streamed per ?range
 ```
 
 ## Tests
@@ -198,6 +233,8 @@ src/app/page.tsx               server page; reads ?range and renders
 - the CSV parser (quotes, escaped quotes, CRLF, empty fields),
 - the loader's validation rules and the real dataset (28 rows, 20 orders, 8 returns),
 - the date rules (presets, Monday weeks, previous period, inclusive bounds),
+- the chat wiring (date table, one tool call, step cap, 429 handling) and the returns tool's `returnedItems` and
+  per-product series (last week's jacket return; totals reconcile to the refund total),
 - every metric against figures computed independently from the CSV: net sales, AOV (including a multi-item
   order), repeat buyers, returns by return date and by order date, and category/channel totals reconciling to
   the window total.

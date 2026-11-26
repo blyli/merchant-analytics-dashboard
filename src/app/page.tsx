@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { ChartCard } from "@/components/ChartCard";
+import { ChatPanel } from "@/components/chat/ChatPanel";
 import { DataTable, type Column } from "@/components/DataTable";
 import { KpiTile } from "@/components/KpiTile";
 import { AovChart } from "@/components/charts/AovChart";
@@ -26,21 +27,29 @@ function parseRange(value: string | undefined): PresetKey {
 
 type SearchParams = Promise<{ range?: string }>;
 
-/** Page shell. The range-dependent body streams inside Suspense, as Cache Components requires. */
+/**
+ * Page shell. The chat does not depend on ?range, so it renders in the static shell.
+ * The range-dependent dashboard streams inside Suspense, as Cache Components requires.
+ */
 export default function Page({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <Suspense fallback={<DashboardSkeleton />}>
-      <Dashboard searchParams={searchParams} />
-    </Suspense>
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6">
+      <header>
+        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">Merchant analytics</h1>
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          Store order history, May–October 2025. Ask a question or browse the dashboard below.
+        </p>
+      </header>
+      <ChatPanel />
+      <Suspense fallback={<DashboardSkeleton />}>
+        <Dashboard searchParams={searchParams} />
+      </Suspense>
+    </main>
   );
 }
 
 function DashboardSkeleton() {
-  return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6">
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading dashboard…</p>
-    </main>
-  );
+  return <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading dashboard…</p>;
 }
 
 async function Dashboard({ searchParams }: { searchParams: SearchParams }) {
@@ -87,10 +96,10 @@ async function Dashboard({ searchParams }: { searchParams: SearchParams }) {
   ];
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6">
+    <section aria-labelledby="dashboard-heading" className="flex flex-col gap-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">Merchant analytics</h1>
+          <h2 id="dashboard-heading" className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Dashboard</h2>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             {windowLabel} · Orders placed in this window unless noted
           </p>
@@ -198,6 +207,6 @@ async function Dashboard({ searchParams }: { searchParams: SearchParams }) {
         Today is fixed at {formatShortDate(PRESET_WINDOWS["this-month"].endDate)} (2025). Dataset:
         May–October 2025 store order history. See README for metric definitions.
       </footer>
-    </main>
+    </section>
   );
 }

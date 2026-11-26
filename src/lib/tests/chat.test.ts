@@ -180,6 +180,48 @@ describe("returns tool data", () => {
     expect(Array.isArray(out.byProduct)).toBe(true);
     expect(Array.isArray(out.charts.returnsByReason)).toBe(true);
   });
+
+  it("lists cleaned-up returned lines and per-product bars for last week's jackets", async () => {
+    const tools = createChatTools();
+    const out = (await tools.getReturnsMetrics.execute!(
+      { startDate: "2025-10-20", endDate: "2025-10-26", product: "jacket" },
+      { toolCallId: "x", messages: [], context: {} },
+    )) as {
+      returnedItems: unknown[];
+      charts: { returnsByProduct: unknown[]; returnsByReason: unknown[] };
+    };
+    expect(out.returnedItems).toEqual([
+      {
+        product: "Northridge Insulated Jacket",
+        variant: "S / Olive",
+        returnDate: "2025-10-23",
+        reason: "Too small",
+        refundAmount: 135.15,
+      },
+    ]);
+    expect(out.charts.returnsByProduct).toEqual([
+      { product: "Northridge Insulated Jacket", category: "Outerwear", itemCount: 1, refunds: 135.15 },
+    ]);
+    expect(out.charts.returnsByReason).toEqual([{ reason: "Too small", itemCount: 1, refunds: 135.15 }]);
+  });
+
+  it("orders returned lines newest first and reconciles with the refund total", async () => {
+    const tools = createChatTools();
+    const out = (await tools.getReturnsMetrics.execute!(
+      { startDate: "2025-10-20", endDate: "2025-10-26" },
+      { toolCallId: "x", messages: [], context: {} },
+    )) as {
+      summary: { refundTotal: number; returnedLineCount: number };
+      returnedItems: { returnDate: string; refundAmount: number }[];
+      charts: { returnsByProduct: { refunds: number }[] };
+    };
+    const dates = out.returnedItems.map((r) => r.returnDate);
+    expect(dates).toEqual(["2025-10-26", "2025-10-24", "2025-10-23", "2025-10-21"]);
+    expect(out.returnedItems).toHaveLength(out.summary.returnedLineCount);
+    const cents = (xs: number[]) => xs.reduce((s, x) => s + Math.round(x * 100), 0);
+    expect(cents(out.returnedItems.map((r) => r.refundAmount))).toBe(Math.round(out.summary.refundTotal * 100));
+    expect(cents(out.charts.returnsByProduct.map((r) => r.refunds))).toBe(Math.round(out.summary.refundTotal * 100));
+  });
 });
 
 describe("POST /api/chat", () => {
