@@ -30,9 +30,9 @@
 - **Screenshot:** `screenshots/aq-02.png`
 
 ### AQ-04 — "are repeat customers growing since summer" (Vague date)
-- **Date Range Used:** `2025-05-06` – `2025-10-27` (`2025-05-06` -> `2025-10-27`, full dataset window as closest match for `"since summer"`)
-- **Chart / Output:** Rendered *Returning vs new buyers* donut chart (`18` buyers total; `38.9%` returning / `7` returning vs. `11` new; `2` multi-order vs. `16` single-order) and noted it is a window aggregate rather than a month-by-month trend.
-- **Screenshot:** `screenshots/aq-04.png`
+- **Date Range Used:** `2025-06-01` – `2025-10-27` (`2025-06-01` -> `2025-10-27`, interpreting "since summer" from June 1 through the reference date)
+- **Chart / Output:** Rendered *Returning vs new buyers* donut chart (`17` buyers total; `41.2%` returning / `7` returning vs. `10` new; `1` multi-order vs. `16` single-order) and *Returning vs new buyers by month* stacked bar chart (`2025-06`: 1 buyer, 1 returning / 0 new, 100.0%; `2025-07`: 1 buyer, 0 returning / 1 new, 0%; `2025-08`: 1 buyer, 1 returning / 0 new, 100.0%; `2025-09`: 2 buyers, 1 returning / 1 new, 50%; `2025-10` partial through Oct 27: 12 buyers, 4 returning / 8 new, 33.3%), concluding repeat-customer share is not growing (returning share declined from 100% in June/August to 33.3% in October while new-buyer volume rose to 8, with small sample sizes prior to October).
+- **Screenshots:** `screenshots/aq-04.1.png`, `screenshots/aq-04.2.png`
 
 ### AQ-08 — "how are returns doing" (Missing date)
 - **Date Range Used:** `2025-05-06` – `2025-10-27` (`2025-05-06` -> `2025-10-27`, full dataset window)

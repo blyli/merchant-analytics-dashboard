@@ -270,7 +270,7 @@ reads `data/` from the working directory at runtime, so the `data/` folder must 
 
 ## Live Preview & Acceptance Testing
 
-- **Live Preview:** https://merchant-analytics-dashboard-jnragy8dq-blylis-projects.vercel.app (`dpl_2KwC8baqBaezy777CXzACMys1pW6`)
+- **Live Preview:** https://merchant-analytics-dashboard-fgknvpyxn-blylis-projects.vercel.app/ (`dpl_2KwC8baqBaezy777CXzACMys1pW6`)
 - **Detailed Test Log:** See [results.md](results.md)
 - **Screenshots:** Saved under [`screenshots/`](screenshots/)
 
