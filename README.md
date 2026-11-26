@@ -139,7 +139,7 @@ cp .env.example .env.local     # then set OPENROUTER_API_KEY
 | Variable | Default | Purpose |
 |---|---|---|
 | `OPENROUTER_API_KEY` | none (required) | OpenRouter key. `.env*` is gitignored, only `.env.example` is committed |
-| `OPENROUTER_MODEL_ID` | `google/gemma-4-31b-it:free` | Any OpenRouter model id |
+| `OPENROUTER_MODEL_ID` | `openrouter/free` | Any OpenRouter model id |
 
 Request: `{ "messages": UIMessage[] }` (the AI SDK `useChat` shape). Response: a UI message stream
 (`toUIMessageStreamResponse()`) containing the tool call, its structured result, and the streamed answer.
@@ -173,7 +173,7 @@ curl -N -X POST http://localhost:3000/api/chat -H "content-type: application/jso
 ```
 
 The tests use a scripted mock model, so they check the wiring (prompt, tool choice and arguments, step cap, 429
-handling) but not how well Gemma 4 picks tools. That needs a live run.
+handling) but not how well `openrouter/free` picks tools. That needs a live run.
 
 ## Chat UI
 
