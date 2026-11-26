@@ -1,4 +1,4 @@
-import { APICallError, type UIMessage } from "ai";
+import { APICallError, RetryError, type UIMessage } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { createChatStream } from "@/lib/chat/stream";
 
@@ -10,10 +10,19 @@ const RATE_LIMIT_MESSAGE =
   "The AI model is rate-limited right now (OpenRouter 429). Please wait a moment and try again.";
 const GENERIC_MESSAGE = "Something went wrong answering that. Please try again.";
 
-function statusOf(error: unknown): number | undefined {
+/**
+ * HTTP status behind an error. Unwraps RetryError (the AI SDK retries retryable calls such as a 429,
+ * then throws a RetryError holding every attempt) and `cause` chains. A 429 on any attempt counts.
+ */
+function statusOf(error: unknown, depth = 0): number | undefined {
+  if (error == null || depth > 5) return undefined;
   if (APICallError.isInstance(error)) return error.statusCode;
-  const e = error as { statusCode?: number; status?: number; cause?: unknown } | null;
-  return e?.statusCode ?? e?.status ?? (e?.cause ? statusOf(e.cause) : undefined);
+  if (RetryError.isInstance(error)) {
+    const attempts = [error.lastError, ...error.errors].map((e) => statusOf(e, depth + 1));
+    return attempts.includes(429) ? 429 : attempts.find((s) => s !== undefined);
+  }
+  const e = error as { statusCode?: number; status?: number; cause?: unknown };
+  return e.statusCode ?? e.status ?? (e.cause ? statusOf(e.cause, depth + 1) : undefined);
 }
 
 function errorResponse(error: unknown): Response {

@@ -1,4 +1,4 @@
-import { APICallError, type UIMessage } from "ai";
+import { APICallError, RetryError, type UIMessage } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createChatStream } from "../chat/stream";
@@ -229,6 +229,7 @@ describe("POST /api/chat", () => {
     vi.unstubAllEnvs();
     vi.resetModules();
     vi.doUnmock("@openrouter/ai-sdk-provider");
+    vi.restoreAllMocks();
   });
 
   async function post(body: unknown) {
@@ -256,6 +257,78 @@ describe("POST /api/chat", () => {
     expect(res.status).toBe(429);
     expect(res.headers.get("content-type")).toContain("application/json");
     expect(await res.json()).toMatchObject({ error: "rate_limited", message: expect.stringContaining("rate-limited") });
+  });
+
+  function rateLimitError(isRetryable: boolean) {
+    return new APICallError({
+      message: "google/gemma-4-31b-it:free is temporarily rate-limited upstream.",
+      url: "https://openrouter.ai/api/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 429,
+      isRetryable,
+    });
+  }
+
+  it(
+    "returns a JSON 429 when the SDK retries a retryable 429 and wraps it in a RetryError",
+    async () => {
+      vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+      let attempts = 0;
+      vi.doMock("@openrouter/ai-sdk-provider", () => ({
+        createOpenRouter: () => () =>
+          new MockLanguageModelV4({
+            doStream: async () => {
+              attempts += 1;
+              throw rateLimitError(true);
+            },
+          }),
+      }));
+      const res = await post({ messages: [userMessage("sales last week?")] });
+      expect(attempts).toBe(3); // first try + 2 SDK retries, so the error reaching the route is a RetryError
+      expect(res.status).toBe(429);
+      expect(res.headers.get("retry-after")).toBe("30");
+      expect(await res.json()).toMatchObject({ error: "rate_limited", message: expect.stringContaining("rate-limited") });
+    },
+    20_000,
+  );
+
+  it("unwraps a RetryError whose attempts include a 429", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    vi.doMock("@openrouter/ai-sdk-provider", () => ({
+      createOpenRouter: () => () =>
+        new MockLanguageModelV4({
+          doStream: async () => {
+            throw new RetryError({
+              message: "Failed after 3 attempts.",
+              reason: "maxRetriesExceeded",
+              errors: [new Error("socket hang up"), rateLimitError(true), rateLimitError(true)],
+            });
+          },
+        }),
+    }));
+    const res = await post({ messages: [userMessage("sales last week?")] });
+    expect(res.status).toBe(429);
+    expect(await res.json()).toMatchObject({ error: "rate_limited" });
+  });
+
+  it("keeps a generic 500 for a RetryError with no 429 inside", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.doMock("@openrouter/ai-sdk-provider", () => ({
+      createOpenRouter: () => () =>
+        new MockLanguageModelV4({
+          doStream: async () => {
+            throw new RetryError({
+              message: "Failed after 3 attempts.",
+              reason: "maxRetriesExceeded",
+              errors: [new Error("socket hang up"), new Error("socket hang up")],
+            });
+          },
+        }),
+    }));
+    const res = await post({ messages: [userMessage("sales last week?")] });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ error: "chat_failed" });
   });
 
   it("streams a UI message response on success", async () => {

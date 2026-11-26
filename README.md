@@ -246,3 +246,15 @@ src/app/page.tsx               server page: chat in the static shell, dashboard 
 
 Standard Next.js app. `npm run build` followed by `npm start`, or deploy to any Node-capable host. The dashboard
 reads `data/` from the working directory at runtime, so the `data/` folder must ship with the app.
+
+## Live Preview & Acceptance Testing
+
+- **Live Preview:** https://merchant-analytics-dashboard-jnragy8dq-blylis-projects.vercel.app (`dpl_2KwC8baqBaezy777CXzACMys1pW6`)
+- **Detailed Test Log:** See [results.md](results.md)
+- **Screenshots:** Saved under [`screenshots/`](screenshots/)
+
+| Check | Question | Result |
+| --- | --- | --- |
+| AQ-03 | `which jackets came back the most last week` | Pass (`2025-10-20`–`2025-10-26`, jacket return chart + table) |
+| AQ-07 | `what's my ad spend on Meta this month?` | Pass (out-of-scope refusal, no invented chart) |
+| Vague / Missing Dates | `AQ-02`, `AQ-04`, `AQ-08`, `AQ-11`, `AQ-12` | Verified date windows and chart rendering in [results.md](results.md) |

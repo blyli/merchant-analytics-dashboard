@@ -1,0 +1,9 @@
+# Local working files that are not part of the app
+question_set.xlsx
+
+# Never upload local env files or build output (Vercel ignores most of these by default too)
+.env*
+!.env.example
+.vercel
+.next
+node_modules
