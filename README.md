@@ -177,6 +177,9 @@ handling) but not how well Gemma 4 picks tools. That needs a live run.
 
 ## Chat UI
 
+![Merchant chat prompt and Net sales by day line chart](docs/orders-chart.png)
+![Net sales by category and channel stacked bar chart with streamed summary](docs/orders-breakdown.png)
+
 `src/components/chat/ChatPanel.tsx` is a client component that uses `useChat` from `@ai-sdk/react` with a
 `DefaultChatTransport` pointed at `/api/chat`. Messages are typed with `InferUITools<ChatTools>`, so each tool part
 carries its real output type.
