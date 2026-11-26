@@ -194,16 +194,20 @@ export function createChatTools(getLines: () => readonly OrderLine[] = loadOrder
 
     getRepeatCustomerMetrics: tool({
       description:
-        "Use when a merchant asks whether repeat customers are growing, what percentage or share of orders come from returning customers, how many customers came back twice, or whether more people are ordering a second time over a date range.",
+        "Use when a merchant asks whether repeat customers are growing or shrinking (including since a month or season), how the returning-customer share has trended month by month, what percentage or share of orders come from returning customers, how many customers came back twice, or whether more people are ordering a second time over a date range. Returns a window summary plus a month-by-month breakdown (monthly) for trend questions.",
       inputSchema: z.object(dateInput),
       execute: async ({ startDate, endDate }) => {
         const w = clampToDatasetBounds(startDate, endDate);
-        const { segments, ...summary } = repeatCustomers(w.startDate, w.endDate, { lines: getLines() });
+        const { segments, monthly, ...summary } = repeatCustomers(w.startDate, w.endDate, { lines: getLines() });
         return {
           ...note(w.adjusted, w.startDate, w.endDate),
           window: summary.window,
           summary,
-          charts: { returningVsNew: segments },
+          /** Per calendar month (clamped to the window): buyers, returning, new, returningSharePct, multiOrderBuyers. */
+          monthly,
+          monthlyNote:
+            "Each month counts its own buyers, so one customer can appear in several months and monthly buyers need not sum to the window total. A partial first or last month is clamped to the window (see startDate/endDate).",
+          charts: { returningVsNew: segments, monthlyReturningVsNew: monthly },
         };
       },
     }),

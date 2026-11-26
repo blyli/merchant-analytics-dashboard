@@ -7,11 +7,13 @@ import { AovChart } from "@/components/charts/AovChart";
 import { CategoryChannelChart } from "@/components/charts/CategoryChannelChart";
 import { NetSalesChart } from "@/components/charts/NetSalesChart";
 import { RepeatDonut } from "@/components/charts/RepeatDonut";
+import { RepeatMonthlyChart, formatMonth } from "@/components/charts/RepeatMonthlyChart";
 import { ReturnsChart } from "@/components/charts/ReturnsChart";
 import type { ReturnedItem, ReturnsByProductRow } from "@/lib/chat/tools";
 import { formatCount, formatMoney, formatPct, formatShortDate, formatWindow } from "@/lib/format";
 import type { AovWeekPoint } from "@/lib/metrics/averageOrderValue";
 import type { DailySalesPoint } from "@/lib/metrics/netSales";
+import type { RepeatMonthPoint } from "@/lib/metrics/repeatCustomers";
 import type { ReturnReasonRow } from "@/lib/metrics/returnsRefunds";
 import type { CategorySales } from "@/lib/metrics/salesBreakdown";
 import type { AovOutput, RepeatOutput, ReturnsOutput, SalesOutput } from "./types";
@@ -137,7 +139,41 @@ export function RepeatResult({ output }: { output: RepeatOutput }) {
       >
         <RepeatDonut segments={charts.returningVsNew} buyers={summary.buyers} />
       </ChartCard>
+      {charts.monthlyReturningVsNew.length > 1 ? <RepeatMonthlyCard monthly={charts.monthlyReturningVsNew} /> : null}
     </div>
+  );
+}
+
+function isPartialMonth(m: RepeatMonthPoint): boolean {
+  const [y, mo] = m.month.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  return m.startDate !== `${m.month}-01` || m.endDate !== `${m.month}-${String(lastDay).padStart(2, "0")}`;
+}
+
+const monthColumns: Column<RepeatMonthPoint>[] = [
+  { header: "Month", cell: (r) => `${formatMonth(r.month, "long")}${isPartialMonth(r) ? " (partial)" : ""}` },
+  { header: "Buyers", cell: (r) => formatCount(r.buyers), align: "right" },
+  { header: "Returning", cell: (r) => formatCount(r.returning), align: "right" },
+  { header: "New", cell: (r) => formatCount(r.new), align: "right" },
+  { header: "Returning share", cell: (r) => (r.buyers === 0 ? "—" : `${r.returningSharePct.toFixed(1)}%`), align: "right" },
+  { header: "Multi-order", cell: (r) => formatCount(r.multiOrderBuyers), align: "right" },
+];
+
+function RepeatMonthlyCard({ monthly }: { monthly: RepeatMonthPoint[] }) {
+  const first = monthly[0];
+  const last = monthly[monthly.length - 1];
+  const share = (m: RepeatMonthPoint) => (m.buyers === 0 ? "no buyers" : `${m.returningSharePct.toFixed(1)}% returning`);
+  const partial = monthly.filter(isPartialMonth).map((m) => formatMonth(m.month));
+  return (
+    <ChartCard
+      title="Returning vs new buyers by month"
+      description={`${formatMonth(first.month, "long")}: ${formatCount(first.returning)} of ${formatCount(first.buyers)} buyers returning (${share(first)}). ${formatMonth(last.month, "long")}: ${formatCount(last.returning)} of ${formatCount(last.buyers)} (${share(last)}).${
+        partial.length ? ` ${partial.join(" and ")} ${partial.length > 1 ? "are" : "is"} partial.` : ""
+      } Each month counts its own buyers.`}
+      table={<DataTable columns={monthColumns} rows={monthly} caption="Returning vs new buyers by month" />}
+    >
+      <RepeatMonthlyChart monthly={monthly} />
+    </ChartCard>
   );
 }
 

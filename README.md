@@ -97,7 +97,7 @@ dataset, which the tests use for fixtures.
 - `weekly` buckets orders by Monday-start week, with per-week order count, revenue, and AOV.
 - A multi-item order is one order. It is never counted once per line.
 
-### 3. Repeat customers — `repeatCustomers()` — donut chart
+### 3. Repeat customers — `repeatCustomers()` — donut chart + monthly stacked bar
 
 - `buyers = COUNT(DISTINCT customer_id)` for in-window lines.
 - A buyer is **returning** if any in-window line has `is_repeat_customer = true`, otherwise **new**.
@@ -106,6 +106,22 @@ dataset, which the tests use for fixtures.
 
 The flag is stored per line at order time, so "returning" describes the customer's status in this window,
 not a lifetime count. A customer with mixed flags counts as returning.
+
+**Monthly breakdown.** `monthly` has one bucket per calendar month (`YYYY-MM`) that the window overlaps, earliest
+first. Each bucket is clamped to the window, so its `startDate`/`endDate` show which days were counted. Example:
+Jun 1 – Oct 27 gives five buckets, and October ends on the 27th. Each bucket applies the rules above to lines whose
+`order_date` falls in it:
+
+| Field | Definition |
+|---|---|
+| `buyers` | `COUNT(DISTINCT customer_id)` in the month |
+| `returning` | buyers with at least one in-month line flagged `is_repeat_customer = true` |
+| `new` | `buyers − returning` |
+| `returningSharePct` | `returning / buyers × 100`, rounded to 0.1, and **`0`** for a month with no buyers (the window-level share is `null` in that case) |
+| `multiOrderBuyers` | buyers with more than one distinct `order_id` in the month |
+
+Months with no orders appear with zeros. A customer can be counted in several months, and their flag can differ
+between months, so monthly `buyers` do not have to add up to the window's `buyers`.
 
 ### 4. Returns and refunds — `returnsRefunds()` — bar chart by reason
 
@@ -156,7 +172,12 @@ How it works:
   `getReturnsMetrics` also returns `charts.returnsByReason` and `charts.returnsByProduct` (item count and refunds per
   reason / product, for bar charts) and `returnedItems`: one row per returned order line with `product`, `variant`,
   `returnDate`, `reason` (`"Unspecified"` if blank) and `refundAmount`, newest return first. Both reconcile to
-  `summary.refundTotal`.
+  `summary.refundTotal`. `getRepeatCustomerMetrics` also returns `monthly`, the month-by-month breakdown, which is
+  repeated in `charts.monthlyReturningVsNew`. That lets trend questions ("are repeat customers growing since
+  summer?") cite each month's figures.
+- **Trend dates.** The prompt also fixes summer as `2025-06-01`–`2025-08-31`. "Since summer" or "since <month>" runs
+  from the 1st of that month to `2025-10-27`. For trend questions the model is asked to compare the `monthly` figures
+  and to say when the latest month is partial.
 - **Guardrails.** Dates pass through `clampToDatasetBounds()`: invalid dates fall back to the dataset bounds,
   out-of-range dates are clamped, reversed ranges are swapped, and the result carries a `dateNote` when anything changed.
 - **One tool call.** `stopWhen: stepCountIs(2)`: step 1 is the tool call, step 2 is the written answer. The prompt also asks
@@ -194,7 +215,7 @@ carries its real output type.
   |---|---|
   | `getSalesMetrics` | Net sales line chart, plus the category × channel stacked bar when there is data |
   | `getAverageOrderValue` | Weekly AOV bar chart with an AOV callout tile |
-  | `getRepeatCustomerMetrics` | New vs returning donut |
+  | `getRepeatCustomerMetrics` | New vs returning donut, plus a monthly stacked bar (returning vs new buyers) when the range covers 2+ months |
   | `getReturnsMetrics` | Refunds-by-reason bar chart, plus a table of returned order lines (`returnedItems`) |
 
   Every card keeps the "Show data table" view. For returns it shows the reason and per-product breakdowns.

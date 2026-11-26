@@ -117,6 +117,83 @@ describe("repeatCustomers", () => {
     expect(r.returningBuyers).toBe(1);
     expect(r.multiOrderBuyers).toBe(1);
   });
+
+  describe("monthly breakdown", () => {
+    it("since summer (Jun 1 – Oct 27): one bucket per month, matching the CSV", () => {
+      const r = repeatCustomers("2025-06-01", "2025-10-27");
+      expect(r.monthly).toEqual([
+        { month: "2025-06", startDate: "2025-06-01", endDate: "2025-06-30", buyers: 1, returning: 1, new: 0, returningSharePct: 100, multiOrderBuyers: 0 },
+        { month: "2025-07", startDate: "2025-07-01", endDate: "2025-07-31", buyers: 1, returning: 0, new: 1, returningSharePct: 0, multiOrderBuyers: 0 },
+        { month: "2025-08", startDate: "2025-08-01", endDate: "2025-08-31", buyers: 1, returning: 1, new: 0, returningSharePct: 100, multiOrderBuyers: 0 },
+        { month: "2025-09", startDate: "2025-09-01", endDate: "2025-09-30", buyers: 2, returning: 1, new: 1, returningSharePct: 50, multiOrderBuyers: 0 },
+        { month: "2025-10", startDate: "2025-10-01", endDate: "2025-10-27", buyers: 12, returning: 4, new: 8, returningSharePct: 33.3, multiOrderBuyers: 1 },
+      ]);
+      // Window-level fields are unchanged by the new breakdown.
+      expect(r.buyers).toBe(17);
+      expect(r.returningBuyers).toBe(7);
+      expect(r.returningSharePct).toBe(41.2);
+    });
+
+    it("clamps partial first/last months to the window and spans a year boundary", () => {
+      const lines = [
+        makeLine({ customerId: "A", orderId: "#1", orderDate: "2025-11-14" }), // before window
+        makeLine({ customerId: "B", orderId: "#2", orderDate: "2025-11-15" }),
+        makeLine({ customerId: "C", orderId: "#3", orderDate: "2026-01-10", isRepeatCustomer: true }),
+        makeLine({ customerId: "D", orderId: "#4", orderDate: "2026-01-11" }), // after window
+      ];
+      const r = repeatCustomers("2025-11-15", "2026-01-10", { lines });
+      expect(r.monthly.map((m) => [m.month, m.startDate, m.endDate, m.buyers])).toEqual([
+        ["2025-11", "2025-11-15", "2025-11-30", 1],
+        ["2025-12", "2025-12-01", "2025-12-31", 0],
+        ["2026-01", "2026-01-01", "2026-01-10", 1],
+      ]);
+      expect(r.monthly[2]).toMatchObject({ returning: 1, new: 0, returningSharePct: 100 });
+    });
+
+    it("zero-fills months with no buyers, with share 0 (not null)", () => {
+      const lines = [makeLine({ customerId: "A", orderId: "#1", orderDate: "2025-07-15" })];
+      const r = repeatCustomers("2025-06-01", "2025-08-31", { lines });
+      expect(r.monthly).toHaveLength(3);
+      for (const m of [r.monthly[0], r.monthly[2]]) {
+        expect(m).toMatchObject({ buyers: 0, returning: 0, new: 0, returningSharePct: 0, multiOrderBuyers: 0 });
+      }
+      expect(r.monthly[1]).toMatchObject({ month: "2025-07", buyers: 1, returning: 0, new: 1 });
+    });
+
+    it("mixed is_repeat_customer flags within a month count the buyer once, as returning", () => {
+      const lines = [
+        makeLine({ customerId: "X", orderId: "#1", orderDate: "2025-09-02", isRepeatCustomer: false }),
+        makeLine({ customerId: "X", orderId: "#1", lineItemId: "LI-2", orderDate: "2025-09-02", isRepeatCustomer: false }),
+        makeLine({ customerId: "X", orderId: "#2", orderDate: "2025-09-20", isRepeatCustomer: true }),
+        makeLine({ customerId: "Y", orderId: "#3", orderDate: "2025-09-05", isRepeatCustomer: false }),
+        makeLine({ customerId: "Z", orderId: "#4", orderDate: "2025-09-06", isRepeatCustomer: false }),
+        // X again in October with only unflagged lines: new in October, returning in September.
+        makeLine({ customerId: "X", orderId: "#5", orderDate: "2025-10-03", isRepeatCustomer: false }),
+      ];
+      const r = repeatCustomers("2025-09-01", "2025-10-31", { lines });
+      expect(r.monthly[0]).toEqual({
+        month: "2025-09",
+        startDate: "2025-09-01",
+        endDate: "2025-09-30",
+        buyers: 3,
+        returning: 1,
+        new: 2,
+        returningSharePct: 33.3,
+        multiOrderBuyers: 1,
+      });
+      expect(r.monthly[1]).toMatchObject({ month: "2025-10", buyers: 1, returning: 0, new: 1, multiOrderBuyers: 0 });
+      // Window level: X is returning (any flagged line in the window), and placed 3 orders.
+      expect(r).toMatchObject({ buyers: 3, returningBuyers: 1, multiOrderBuyers: 1 });
+    });
+
+    it("a single-day window yields one clamped month", () => {
+      const r = repeatCustomers("2025-10-21", "2025-10-21");
+      expect(r.monthly).toHaveLength(1);
+      expect(r.monthly[0]).toMatchObject({ month: "2025-10", startDate: "2025-10-21", endDate: "2025-10-21" });
+      expect(r.monthly[0].buyers).toBe(r.buyers);
+      expect(r.monthly[0].returning).toBe(r.returningBuyers);
+    });
+  });
 });
 
 describe("returnsRefunds", () => {

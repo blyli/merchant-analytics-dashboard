@@ -224,6 +224,27 @@ describe("returns tool data", () => {
   });
 });
 
+describe("repeat customer tool data", () => {
+  it("passes the monthly series through for trend questions", async () => {
+    const tools = createChatTools();
+    const out = await tools.getRepeatCustomerMetrics.execute!(
+      { startDate: "2025-06-01", endDate: "2025-10-27" },
+      { toolCallId: "x", messages: [], context: {} },
+    );
+    const { monthly, charts, summary } = out as Exclude<typeof out, AsyncIterable<unknown>>;
+    expect(monthly.map((m) => m.month)).toEqual(["2025-06", "2025-07", "2025-08", "2025-09", "2025-10"]);
+    expect(charts.monthlyReturningVsNew).toEqual(monthly);
+    expect(summary).not.toHaveProperty("monthly");
+    expect(summary).toMatchObject({ buyers: 17, returningBuyers: 7 });
+  });
+
+  it("the prompt tells the model how to date 'since summer' and to cite monthly figures", () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('"since summer" or "since June" means 2025-06-01 to 2025-10-27');
+    expect(prompt).toContain("`monthly` series");
+  });
+});
+
 describe("POST /api/chat", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
